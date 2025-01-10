@@ -1,0 +1,19 @@
+<div class="grid-container">
+  <div class="grid">
+    @for (row of grid$ | async; track row) {
+      <div class="grid-row">
+        @for (cell of row; track cell) {
+          <div 
+            class="grid-cell" 
+            [ngClass]="{
+              'obstacle': cell.value === 1,
+              'tractor': cell.value === 2
+            }"
+            (click)="onCellClick(cell.x, cell.y)"
+            (contextmenu)="onRightClick($event, cell.x, cell.y)">
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div> 
