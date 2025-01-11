@@ -1,0 +1,11 @@
+<div class="grid-container">
+  <div class="grid">
+    <div *ngFor="let row of grid; let i = index">
+      <div *ngFor="let cell of row; let j = index"
+           class="cell"
+           [ngClass]="getCellClass(cell)"
+           (click)="onCellClick(i, j)">
+      </div>
+    </div>
+  </div>
+</div> 

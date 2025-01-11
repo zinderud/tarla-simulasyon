@@ -1,7 +1,7 @@
 export interface GridCell {
-  value: number;  // 0: boş, 1: biçilmeyecek alan, 2: traktör
   x: number;
   y: number;
+  value: number; // 0: boş, 1: engel, 2: traktör
 }
 
 export interface Tractor {

@@ -1,12 +1,13 @@
 import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { GridComponent } from './components/grid/grid.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.css'
+  styleUrls: ['./app.component.scss'],
+  standalone: true,
+  imports: [GridComponent]
 })
 export class AppComponent {
-  title = 'tarla-simulasyon';
+  title = 'Tarla Simülasyonu';
 }

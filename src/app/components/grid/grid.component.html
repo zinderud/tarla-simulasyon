@@ -1,19 +1,140 @@
 <div class="grid-container">
-  <div class="grid">
+  <div class="controls">
+    <button [class.active]="drawMode === 'obstacle'" 
+            (click)="setDrawMode('obstacle')">
+      Engel Çiz
+    </button>
+    <button [class.active]="drawMode === 'tractor'" 
+            (click)="setDrawMode('tractor')">
+      Traktör Yerleştir
+    </button>
+  </div>
+  
+  <!-- Traktör Kontrol Paneli -->
+  <div class="tractor-panel">
+    <h3>Traktörler</h3>
+    @for (tractor of tractors$ | async; track tractor.id) {
+      <div class="tractor-item">
+        <span>Traktör #{{ tractor.id }}</span>
+        <span [class.inactive]="!tractor.isActive">
+          {{ tractor.isActive ? 'Aktif' : 'Bozuk' }}
+        </span>
+        <button 
+          *ngIf="tractor.isActive"
+          (click)="breakTractor(tractor.id)">
+          Bozuldu
+        </button>
+      </div>
+    }
+    <div class="control-buttons">
+      <button 
+        class="simulate-button"
+        (click)="startSimulation()"
+        [disabled]="isSimulating || isSimulationStarted">
+        <span *ngIf="isSimulating" class="spinner"></span>
+        {{ isSimulating ? 'Simülasyon Çalışıyor...' : 
+           simulationService.hasRoutes() ? 'Rotalar Hazır' : 'Simülasyon Başlat' }}
+      </button>
+      
+      <button 
+        class="start-button"
+        (click)="startMovement()"
+        [disabled]="!simulationService.hasRoutes() || isSimulationStarted || isSimulating">
+        {{ isSimulationStarted ? 'Hareket Ediyor...' : 'Harekete Başla' }}
+      </button>
+    </div>
+  </div>
+  
+  <!-- Performans Göstergeleri -->
+  <div class="performance-panel">
+    <div class="metrics">
+      <div class="metric">
+        <label>Tamamlanma:</label>
+        <span>{{ (simulationState$ | async)?.completionPercentage?.toFixed(2) || '0' }}%</span>
+      </div>
+      <div class="metric">
+        <label>Aktif Traktör:</label>
+        <span>{{ (simulationState$ | async)?.tractorStates?.length || 0 }}</span>
+      </div>
+      <div class="metric">
+        <label>İterasyon:</label>
+        <span>{{ (simulationState$ | async)?.iteration || 0 }} / 100</span>
+      </div>
+    </div>
+
+    <div class="path-controls">
+      <button (click)="showBestRoute()" [disabled]="!simulationState$">
+        En İyi Rotayı Göster
+      </button>
+      <button (click)="hidePaths()" *ngIf="showPaths">
+        Rotayı Gizle
+      </button>
+    </div>
+  </div>
+  
+  <div class="grid" 
+       (mouseleave)="onMouseUp($event)"
+       (mouseup)="onMouseUp($event)"
+       [class.show-paths]="showPaths">
     @for (row of grid$ | async; track row) {
       <div class="grid-row">
         @for (cell of row; track cell) {
           <div 
             class="grid-cell" 
-            [ngClass]="{
-              'obstacle': cell.value === 1,
-              'tractor': cell.value === 2
-            }"
-            (click)="onCellClick(cell.x, cell.y)"
-            (contextmenu)="onRightClick($event, cell.x, cell.y)">
+            [ngClass]="getCellClass(cell)"
+            [style.background-color]="getCellColor(cell)"
+            (mousedown)="onMouseDown($event, cell.x, cell.y)"
+            (mousemove)="onMouseMove(cell.x, cell.y)"
+            (click)="updateCell(cell.x, cell.y)"
+            (contextmenu)="$event.preventDefault()">
+            <div class="path-indicator" *ngIf="isPartOfPath(cell)"></div>
           </div>
         }
       </div>
     }
   </div>
+</div> 
+
+<!-- Simülasyon durumu göstergesi -->
+<div class="simulation-status" *ngIf="isSimulating">
+  <div class="progress-bar">
+    <div class="progress-inner"></div>
+  </div>
+  <div class="status-info">
+    <p class="status">
+      {{ (simulationService.simulationStatus$ | async)?.status }}
+    </p>
+    <div class="test-info">
+      <p class="test-count">
+        Test Sayısı: #{{ (simulationService.simulationStatus$ | async)?.currentTest || 0 }}
+      </p>
+      <p class="coverage">
+        En İyi Kapsama: {{ ((simulationService.simulationStatus$ | async)?.bestCoverage || 0).toFixed(2) }}%
+      </p>
+    </div>
+    <div class="details" *ngIf="simulationService.simulationStatus$ | async as status">
+      <p class="time" *ngIf="status.currentTest > 0">
+        Geçen Süre: {{ status.currentTest * 0.1 | number:'1.1-1' }} sn
+      </p>
+      <p class="speed">
+        Test Hızı: {{ status.currentTest / ((status.currentTest * 0.1) || 1) | number:'1.0-0' }} test/sn
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Simülasyon kontrolleri -->
+<div class="simulation-controls" *ngIf="isSimulating">
+  <button 
+    class="cancel-button"
+    (click)="cancelSimulation()"
+    [disabled]="!isSimulating">
+    Simülasyonu İptal Et
+  </button>
+  <button 
+    class="pause-button"
+    (click)="togglePause()"
+    [disabled]="!isSimulating">
+    {{ isPaused ? 'Devam Et' : 'Duraklat' }}
+  </button>
 </div> 
