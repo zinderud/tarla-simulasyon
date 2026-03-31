@@ -39,6 +39,8 @@ export class SimulationService {
   // Grid boyutu ve matris
   private readonly GRID_SIZE = 20;
   private readonly WORKING_WIDTH = 1; // Traktör çalışma genişliği (bitişik hücreler)
+  private readonly MIN_FREQUENCY = 0.8;    // Traktör minimum doğal frekansı (Kuramoto)
+  private readonly FREQUENCY_RANGE = 0.4;  // Frekans varyasyon aralığı [MIN, MIN+RANGE]
   private matrix: number[][] = [];
   private harvestedColors: string[][] = [];
 
@@ -137,7 +139,7 @@ export class SimulationService {
         color: this.TRACTOR_COLORS[colorIndex].tractor,
         harvestedColor: this.TRACTOR_COLORS[colorIndex].harvested,
         phase: Math.random() * 2 * Math.PI,  // Rastgele başlangıç fazı
-        frequency: 0.8 + Math.random() * 0.4  // Doğal frekans [0.8, 1.2]
+        frequency: this.MIN_FREQUENCY + Math.random() * this.FREQUENCY_RANGE  // Doğal frekans
       };
       
       this.tractors.push(tractor);
@@ -275,7 +277,7 @@ export class SimulationService {
           if (dx === 0 && dy === 0) continue;
           const nx = tractor.x + dx;
           const ny = tractor.y + dy;
-          if (this.isValidPosition(nx, ny) && this.matrix[ny][nx] === 0) {
+          if (this.isValidPosition(nx, ny) && (this.matrix[ny][nx] === 0 || this.matrix[ny][nx] === 2)) {
             this.harvestCell(ny, nx, tractor.harvestedColor);
           }
         }

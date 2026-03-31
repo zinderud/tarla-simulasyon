@@ -139,7 +139,7 @@ export class PathFinderService {
     switch (cellValue) {
       case 0: return 1.0;  // Normal tarla
       case 4: return 0.8;  // Biçilmiş alan (daha kolay geçiş)
-      case 2: return 1.5;  // Traktör pozisyonu (engel gibi davranır ama geçilebilir)
+      case 2: return 2.0;  // Traktör pozisyonu (yüksek maliyet - yol örtüşmesini caydır)
       default: return 1.0;
     }
   }

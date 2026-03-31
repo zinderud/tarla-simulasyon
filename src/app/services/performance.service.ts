@@ -25,6 +25,9 @@ export interface RoutePerformance {
 export class PerformanceService {
   private routes: Map<string, RoutePerformance> = new Map();
   private startTime: number = 0;
+  
+  // Verimlilik hesaplama sabitleri
+  private readonly COLLISION_PENALTY_FACTOR = 0.1; // Her çarpışmanın verimlilik üzerindeki ceza ağırlığı
 
   startMeasurement() {
     this.startTime = Date.now();
@@ -54,7 +57,7 @@ export class PerformanceService {
     
     // Verimlilik: normalize edilmiş metrik
     // (tamamlanma oranı × yol optimallığı × çarpışmasızlık oranı)
-    const collisionPenalty = 1 / (1 + collisions * 0.1);
+    const collisionPenalty = 1 / (1 + collisions * this.COLLISION_PENALTY_FACTOR);
     const efficiency = (completionRate / 100) * pathOptimality * collisionPenalty;
 
     return {

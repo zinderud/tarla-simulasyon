@@ -16,6 +16,12 @@ export class KuramotoService {
   private readonly DT = 0.1; // Zaman adımı
   private readonly MIN_DISTANCE = 3; // Minimum güvenli mesafe
   private readonly TWO_PI = 2 * Math.PI;
+  
+  // Hız hesaplama sabitleri
+  private readonly MIN_SPEED = 0.1;        // Minimum traktör hızı (durma eşiği)
+  private readonly BASE_SPEED = 1.0;       // Temel hareket hızı
+  private readonly SPEED_AMPLITUDE = 0.5;  // Faz etkisinin hız üzerindeki genliği
+  private readonly MAX_FREQUENCY_EFFECT = 1.5; // Frekansın hız üzerindeki maksimum etkisi
 
   updatePhases(tractors: TractorPhase[]): TractorPhase[] {
     if (tractors.length === 0) return [];
@@ -155,8 +161,9 @@ export class KuramotoService {
   }
 
   private calculateSpeedFromPhase(phase: number, frequency: number): number {
-    // Faz ve frekansa göre hız hesapla (minimum 0.1 ile negatif hız önlenir)
-    return Math.max(0.1, 1 + 0.5 * Math.sin(phase) * Math.min(frequency, 1.5));
+    // Faz ve frekansa göre hız hesapla (minimum hız ile negatif hız önlenir)
+    const frequencyEffect = Math.min(frequency, this.MAX_FREQUENCY_EFFECT);
+    return Math.max(this.MIN_SPEED, this.BASE_SPEED + this.SPEED_AMPLITUDE * Math.sin(phase) * frequencyEffect);
   }
 
   private calculateSmoothnessFromPhase(phase: number): number {
