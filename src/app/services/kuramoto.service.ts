@@ -15,19 +15,44 @@ export class KuramotoService {
   private readonly K = 0.8;  // Senkronizasyon katsayısı
   private readonly DT = 0.1; // Zaman adımı
   private readonly MIN_DISTANCE = 3; // Minimum güvenli mesafe
+  private readonly TWO_PI = 2 * Math.PI;
 
   updatePhases(tractors: TractorPhase[]): TractorPhase[] {
+    if (tractors.length === 0) return [];
+
     return tractors.map(tractor => {
       // Kuramoto denklemi: dθᵢ/dt = ωᵢ + (K/N)∑ⱼsin(θⱼ - θᵢ)
       const phaseChange = tractor.frequency + 
         (this.K / tractors.length) * 
         this.calculateCoupling(tractor, tractors);
 
+      // Faz açısını [0, 2π) aralığında tutmak için düzgün sarmalama
+      const newPhase = ((tractor.phase + phaseChange * this.DT) % this.TWO_PI + this.TWO_PI) % this.TWO_PI;
+
       return {
         ...tractor,
-        phase: (tractor.phase + phaseChange * this.DT) % (2 * Math.PI)
+        phase: newPhase
       };
     });
+  }
+
+  /**
+   * Kuramoto senkronizasyon derecesi (order parameter):
+   * r(t) = |1/N ∑ e^(iθⱼ)| 
+   * r=0: tamamen desenkronize, r=1: tamamen senkronize
+   */
+  calculateOrderParameter(tractors: TractorPhase[]): number {
+    if (tractors.length === 0) return 0;
+
+    let sumCos = 0;
+    let sumSin = 0;
+
+    for (const tractor of tractors) {
+      sumCos += Math.cos(tractor.phase);
+      sumSin += Math.sin(tractor.phase);
+    }
+
+    return Math.sqrt(sumCos * sumCos + sumSin * sumSin) / tractors.length;
   }
 
   private calculateCoupling(tractor: TractorPhase, allTractors: TractorPhase[]): number {
@@ -130,8 +155,8 @@ export class KuramotoService {
   }
 
   private calculateSpeedFromPhase(phase: number, frequency: number): number {
-    // Faz ve frekansa göre hız hesapla
-    return 1 + 0.5 * Math.sin(phase) * frequency;
+    // Faz ve frekansa göre hız hesapla (minimum 0.1 ile negatif hız önlenir)
+    return Math.max(0.1, 1 + 0.5 * Math.sin(phase) * Math.min(frequency, 1.5));
   }
 
   private calculateSmoothnessFromPhase(phase: number): number {
@@ -180,13 +205,11 @@ export class KuramotoService {
     next: GridCell,
     smoothness: number
   ): GridCell {
-    // Üç nokta arasında yumuşak geçiş
-    const x = curr.x + smoothness * (
-      (next.x - prev.x) / 4
-    );
-    const y = curr.y + smoothness * (
-      (next.y - prev.y) / 4
-    );
+    // Catmull-Rom spline tabanlı üç nokta arası yumuşak geçiş
+    // Standart formül: tangent = tau * (next - prev) / 2
+    const tau = smoothness; // tension parametresi [0, 1]
+    const x = curr.x + tau * (next.x - prev.x) / 2;
+    const y = curr.y + tau * (next.y - prev.y) / 2;
     
     return {
       x: Math.round(x),

@@ -16,8 +16,11 @@ export class FieldService {
 
   toggleCell(row: number, col: number) {
     const currentGrid = this.gridSubject.value;
-    const newGrid = [...currentGrid];
-    newGrid[row][col] = (newGrid[row][col] + 1) % 3;
+    // Derin kopya oluştur (iç diziler de kopyalanmalı)
+    const newGrid = currentGrid.map(r => [...r]);
+    // Uygulama genelindeki hücre durumlarıyla uyumlu döngü:
+    // 0: boş tarla, 1: engel, 2: traktör, 3: sınır, 4: biçilmiş
+    newGrid[row][col] = (newGrid[row][col] + 1) % 5;
     this.gridSubject.next(newGrid);
   }
 } 

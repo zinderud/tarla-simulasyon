@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { GridCell } from '../models/grid-cell';
 import { PathFinderService } from './path-finder.service';
+import { KuramotoService, TractorPhase } from './kuramoto.service';
 
 interface Tractor {
   id: number;
@@ -11,6 +12,8 @@ interface Tractor {
   currentPath: GridCell[];
   color: string;
   harvestedColor: string;
+  phase: number;      // Kuramoto faz açısı
+  frequency: number;  // Doğal frekans
 }
 
 interface SimulationState {
@@ -35,6 +38,7 @@ interface SimulationStatus {
 export class SimulationService {
   // Grid boyutu ve matris
   private readonly GRID_SIZE = 20;
+  private readonly WORKING_WIDTH = 1; // Traktör çalışma genişliği (bitişik hücreler)
   private matrix: number[][] = [];
   private harvestedColors: string[][] = [];
 
@@ -71,7 +75,10 @@ export class SimulationService {
   private simulationCompleted = false;
   private bestRoutes: Map<number, GridCell[]> | null = null;
 
-  constructor(private pathFinder: PathFinderService) {
+  constructor(
+    private pathFinder: PathFinderService,
+    private kuramotoService: KuramotoService
+  ) {
     this.initializeGrid();
     this.initializeHarvestedColors();
   }
@@ -128,7 +135,9 @@ export class SimulationService {
         isActive: true,
         currentPath: [],
         color: this.TRACTOR_COLORS[colorIndex].tractor,
-        harvestedColor: this.TRACTOR_COLORS[colorIndex].harvested
+        harvestedColor: this.TRACTOR_COLORS[colorIndex].harvested,
+        phase: Math.random() * 2 * Math.PI,  // Rastgele başlangıç fazı
+        frequency: 0.8 + Math.random() * 0.4  // Doğal frekans [0.8, 1.2]
       };
       
       this.tractors.push(tractor);
@@ -152,17 +161,13 @@ export class SimulationService {
         throw new Error('Biçilebilir alan bulunamadı!');
       }
 
-      // Alanı traktörler arasında böl
-      const areasPerTractor = Math.ceil(harvestableAreas.length / this.tractors.length);
+      // Alanları coğrafi yakınlığa göre traktörlere ata
       this.bestRoutes = new Map();
-      
       const activeTractors = this.tractors.filter(t => t.isActive);
+      const areaAssignments = this.assignAreasByProximity(harvestableAreas, activeTractors);
       
-      activeTractors.forEach((tractor, index) => {
-        // Her traktöre kendi bölgesini ver
-        const startIdx = index * areasPerTractor;
-        const endIdx = Math.min((index + 1) * areasPerTractor, harvestableAreas.length);
-        const tractorAreas = harvestableAreas.slice(startIdx, endIdx);
+      activeTractors.forEach((tractor) => {
+        const tractorAreas = areaAssignments.get(tractor.id) ?? [];
         
         if (tractorAreas.length > 0) {
           const path = this.calculateOptimalPath(tractor, tractorAreas);
@@ -206,6 +211,9 @@ export class SimulationService {
   private moveAllTractors() {
     if (!this.isRunning || this.simulationCompleted) return;
 
+    // Kuramoto faz güncellemesi: traktörler arası senkronizasyon
+    this.updateTractorPhases();
+
     let activeTractorExists = false;
 
     this.tractors.forEach(tractor => {
@@ -228,12 +236,51 @@ export class SimulationService {
     }
   }
 
+  /**
+   * Kuramoto modeli ile traktör fazlarını güncelle.
+   * Bu, traktörler arasında senkronizasyon sağlar.
+   */
+  private updateTractorPhases() {
+    const activeTractors = this.tractors.filter(t => t.isActive);
+    if (activeTractors.length < 2) return;
+
+    const tractorPhases: TractorPhase[] = activeTractors.map(t => ({
+      id: t.id,
+      phase: t.phase,
+      frequency: t.frequency,
+      position: { x: t.x, y: t.y, value: 2 }
+    }));
+
+    const updatedPhases = this.kuramotoService.updatePhases(tractorPhases);
+
+    // Güncellenmiş fazları traktörlere uygula
+    for (const updated of updatedPhases) {
+      const tractor = this.tractors.find(t => t.id === updated.id);
+      if (tractor) {
+        tractor.phase = updated.phase;
+      }
+    }
+  }
+
   private moveTractor(tractor: Tractor) {
     if (!tractor.currentPath.length) return;
 
     // Önceki konumu biçilmiş alan olarak işaretle
-    this.matrix[tractor.y][tractor.x] = 4;
-    this.harvestedColors[tractor.y][tractor.x] = tractor.harvestedColor;
+    this.harvestCell(tractor.y, tractor.x, tractor.harvestedColor);
+
+    // Çalışma genişliğine göre bitişik hücreleri de biç
+    if (this.WORKING_WIDTH > 0) {
+      for (let dy = -this.WORKING_WIDTH; dy <= this.WORKING_WIDTH; dy++) {
+        for (let dx = -this.WORKING_WIDTH; dx <= this.WORKING_WIDTH; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = tractor.x + dx;
+          const ny = tractor.y + dy;
+          if (this.isValidPosition(nx, ny) && this.matrix[ny][nx] === 0) {
+            this.harvestCell(ny, nx, tractor.harvestedColor);
+          }
+        }
+      }
+    }
 
     // Yeni konuma hareket
     const nextPosition = tractor.currentPath[0];
@@ -243,6 +290,13 @@ export class SimulationService {
     // Yeni konumu işaretle
     this.matrix[tractor.y][tractor.x] = 2;
     tractor.currentPath.shift();
+  }
+
+  private harvestCell(y: number, x: number, color: string) {
+    if (this.matrix[y][x] !== 3 && this.matrix[y][x] !== 1) { // Sınır ve engel hariç
+      this.matrix[y][x] = 4;
+      this.harvestedColors[y][x] = color;
+    }
   }
 
   // Yardımcı metodlar
@@ -288,7 +342,13 @@ export class SimulationService {
       );
 
       if (pathToArea.length > 0) {
-        fullPath = fullPath.concat(pathToArea);
+        // Yol duplikasyonunu önle: ilk segment hariç her segmentin
+        // ilk elemanını atla (önceki segmentin bitiş noktası ile aynı)
+        if (fullPath.length > 0 && pathToArea.length > 1) {
+          fullPath = fullPath.concat(pathToArea.slice(1));
+        } else {
+          fullPath = fullPath.concat(pathToArea);
+        }
         currentPosition = nearestArea;
         
         // Gidilen alanı listeden çıkar
@@ -327,13 +387,50 @@ export class SimulationService {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); // Manhattan mesafesi
   }
 
+  /**
+   * Coğrafi yakınlığa göre alanları traktörlere ata.
+   * Her alan, kendisine en yakın traktöre atanır (Voronoi benzeri bölümleme).
+   */
+  private assignAreasByProximity(
+    areas: GridCell[],
+    tractors: Tractor[]
+  ): Map<number, GridCell[]> {
+    const assignments = new Map<number, GridCell[]>();
+    
+    // Her traktör için boş alan listesi oluştur
+    for (const tractor of tractors) {
+      assignments.set(tractor.id, []);
+    }
+
+    // Her alanı en yakın traktöre ata
+    for (const area of areas) {
+      let minDistance = Infinity;
+      let nearestTractorId = tractors[0].id;
+
+      for (const tractor of tractors) {
+        const distance = this.calculateDistance(
+          area,
+          { x: tractor.x, y: tractor.y, value: 2 }
+        );
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestTractorId = tractor.id;
+        }
+      }
+
+      assignments.get(nearestTractorId)!.push(area);
+    }
+
+    return assignments;
+  }
+
   private completeSimulation() {
     this.isRunning = false;
     this.simulationCompleted = true;
     
     const harvestedArea = this.calculateHarvestedArea();
     const totalArea = this.calculateTotalHarvestablArea();
-    const completionRate = (harvestedArea / totalArea) * 100;
+    const completionRate = totalArea > 0 ? (harvestedArea / totalArea) * 100 : 0;
 
     this.simulationStateSubject.next({
       iteration: this.iterationSubject.getValue(),
@@ -349,7 +446,6 @@ export class SimulationService {
   // Durum kontrol metodları
   hasRoutes(): boolean {
     return Boolean(this.bestRoutes) && 
-          
            !this.isRunning && 
            !this.simulationCompleted && 
            this.tractors.some(t => t.isActive && t.currentPath.length > 0);
@@ -379,6 +475,12 @@ export class SimulationService {
     this.bestRoutes = null;
     this.simulationCompleted = false;
     this.isRunning = false;
+    this.tractors = [];
+    this.iterationSubject.next(0);
+    this.tractorsSubject.next([]);
+    this.simulationStateSubject.next(null);
+    this.initializeGrid();
+    this.initializeHarvestedColors();
     this.updateSimulationStatus(0, 0, 'Hazır');
   }
 
@@ -414,14 +516,12 @@ export class SimulationService {
     const activeTractors = this.tractors.filter(t => t.isActive);
     if (activeTractors.length === 0) return; // Aktif traktör kalmadıysa çık
 
-    // Alanları aktif traktörler arasında böl
-    const areasPerTractor = Math.ceil(unharvestedAreas.length / activeTractors.length);
+    // Alanları coğrafi yakınlığa göre aktif traktörlere ata
+    const areaAssignments = this.assignAreasByProximity(unharvestedAreas, activeTractors);
     
     // Her traktör için yeni rotalar hesapla
-    activeTractors.forEach((tractor, index) => {
-      const startIdx = index * areasPerTractor;
-      const endIdx = Math.min((index + 1) * areasPerTractor, unharvestedAreas.length);
-      const tractorAreas = unharvestedAreas.slice(startIdx, endIdx);
+    activeTractors.forEach((tractor) => {
+      const tractorAreas = areaAssignments.get(tractor.id) ?? [];
       
       if (tractorAreas.length > 0) {
         // Traktörün mevcut konumundan başlayarak yeni rota hesapla

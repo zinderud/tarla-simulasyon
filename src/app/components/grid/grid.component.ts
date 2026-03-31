@@ -138,7 +138,11 @@ export class GridComponent {
 
   resetSimulation() {
     this.isSimulationStarted = false;
-    // Diğer reset işlemleri...
+    this.isSimulating = false;
+    this.isPaused = false;
+    this.showPaths = false;
+    this.selectedPath = [];
+    this.simulationService.resetSimulation();
   }
 
   cancelSimulation() {
